@@ -1,47 +1,31 @@
 async function loadLexusStudy(jsonUrl) {
-    console.log("--- Iniciando loadLexusStudy via ImageManager ---");
+    console.log("--- Iniciando carregamento JSON ---");
+    const response = await fetch(jsonUrl);
+    const data = await response.json();
+
+    // Resetamos o gerenciador para o estado inicial
+    ImageManager = new BlueLightImageManager(); 
+    ImageManager.NumOfPreLoadSops = 0;
+
+    // ... [Seu loop de carregamento que já criamos] ...
+    // DENTRO DO SEU LOOP, ao carregar a imagem:
+    // ...
+    // Após o loop terminar (quando NumOfPreLoadSops chegar a 0):
     
-    try {
-        const response = await fetch(jsonUrl);
-        const data = await response.json();
-
-        // Reseta o contador para evitar conflitos
-        ImageManager.NumOfPreLoadSops = 0;
-
-        for (const study of data.studies) {
-            for (const series of study.series) {
-                for (const instance of series.instances) {
-                    const imageId = 'wadouri:' + instance.url.replace('dicomweb:', '');
-                    
-                    ImageManager.NumOfPreLoadSops += 1;
-                    
-                    cornerstone.loadAndCacheImage(imageId).then(image => {
-                        // Criamos o objeto que o ImageManager espera
-                        let sopData = {
-                            dataSet: image.data, 
-                            image: image,
-                            Sop: { dataSet: image.data, image: image },
-                            SeriesInstanceUID: instance.seriesInstanceUID || "default",
-                            Index: instance.instanceNumber || 1
-                        };
-
-                        ImageManager.preLoadSops.push(sopData);
-                        ImageManager.NumOfPreLoadSops -= 1;
-
-                        // Quando todos terminarem, o ImageManager assume o controle
-                        if (ImageManager.NumOfPreLoadSops === 0) {
-                            console.log("Todos os arquivos carregados, inicializando ImageManager...");
-                            ImageManager.loadPreLoadSops();
-                            // Chama a função interna do BlueLight para organizar o layout
-                            setTimeout(loadRestImageData, 1000);
-                        }
-                    });
-                }
-            }
-        }
-    } catch (error) {
-        console.error("Falha ao integrar com ImageManager:", error);
-    }
+    console.log("JSON carregado, disparando renderização nativa...");
+    
+    // 1. Atualiza as séries
+    setAllSeriesCount();
+    
+    // 2. Chama as funções que o seu "upload" usa para renderizar
+    ImageManager.loadPreLoadSops();
+    
+    // 3. A FUNÇÃO MÁGICA: loadRestImageData é quem ajusta o CSS que descobrimos
+    // que estava escondendo a imagem.
+    setTimeout(loadRestImageData, 1000); 
+    
+    // 4. Garante que a UI saiba que algo foi carregado
+    getByid("MouseOperation").click(); 
 }
 
 function loadSopFromDataSet(dataSet, type) {
