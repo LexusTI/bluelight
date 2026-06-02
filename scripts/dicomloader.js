@@ -1,33 +1,50 @@
 async function loadLexusStudy(jsonUrl) {
-    console.log("--- Iniciando carregamento JSON ---");
-    const response = await fetch(jsonUrl);
-    const data = await response.json();
+    console.log("--- Iniciando carregamento Sincronizado ---");
+    
+    try {
+        const response = await fetch(jsonUrl);
+        const data = await response.json();
+        
+        let promises = [];
+        
+        // Percorre todas as instâncias e cria uma lista de promessas
+        data.studies.forEach(study => {
+            study.series.forEach(series => {
+                series.instances.forEach(instance => {
+                    const imageId = 'wadouri:' + instance.url.replace('dicomweb:', '');
+                    
+                    // Adicionamos a promessa de carregamento à lista
+                    promises.push(
+                        cornerstone.loadAndCacheImage(imageId).then(image => {
+                            // Quando a imagem baixar, adicionamos ao ImageManager
+                            ImageManager.preLoadSops.push({
+                                dataSet: image.data,
+                                image: image,
+                                Sop: { dataSet: image.data, image: image },
+                                SeriesInstanceUID: instance.seriesInstanceUID || "default",
+                                Index: instance.instanceNumber || 1
+                            });
+                            console.log("Imagem adicionada à fila:", imageId);
+                        })
+                    );
+                });
+            });
+        });
 
-    // Resetamos o gerenciador para o estado inicial
-    ImageManager = new BlueLightImageManager(); 
-    ImageManager.NumOfPreLoadSops = 0;
+        // O segredo: aguarda TODAS as imagens terminarem de baixar
+        await Promise.all(promises);
+        
+        console.log("Todas as imagens baixadas. Total na fila:", ImageManager.preLoadSops.length);
+        
+        // Agora, e somente agora, inicializamos a interface
+        ImageManager.loadPreLoadSops();
+        setAllSeriesCount();
+        setTimeout(loadRestImageData, 1000);
 
-    // ... [Seu loop de carregamento que já criamos] ...
-    // DENTRO DO SEU LOOP, ao carregar a imagem:
-    // ...
-    // Após o loop terminar (quando NumOfPreLoadSops chegar a 0):
-    
-    console.log("JSON carregado, disparando renderização nativa...");
-    
-    // 1. Atualiza as séries
-    setAllSeriesCount();
-    
-    // 2. Chama as funções que o seu "upload" usa para renderizar
-    ImageManager.loadPreLoadSops();
-    
-    // 3. A FUNÇÃO MÁGICA: loadRestImageData é quem ajusta o CSS que descobrimos
-    // que estava escondendo a imagem.
-    setTimeout(loadRestImageData, 1000); 
-    
-    // 4. Garante que a UI saiba que algo foi carregado
-    getByid("MouseOperation").click(); 
+    } catch (error) {
+        console.error("Erro fatal no carregamento:", error);
+    }
 }
-
 function loadSopFromDataSet(dataSet, type) {
     try {
         var ErrorStudy = dataSet.string(Tag.StudyInstanceUID);
