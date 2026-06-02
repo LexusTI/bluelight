@@ -1,42 +1,47 @@
 async function loadLexusStudy(jsonUrl) {
-    const response = await fetch(jsonUrl);
-    const data = await response.json();
+    console.log("--- Iniciando loadLexusStudy via ImageManager ---");
+    
+    try {
+        const response = await fetch(jsonUrl);
+        const data = await response.json();
 
-    // Em vez de exibir direto, vamos registrar no ImageManager
-    data.studies.forEach(study => {
-        study.series.forEach(series => {
-            series.instances.forEach(instance => {
-                const imageId = 'wadouri:' + instance.url.replace('dicomweb:', '');
-                
-                // Aqui está o segredo: você precisa que o ImageManager reconheça esse SOP
-                // Você pode tentar injetar no preLoadSops ou chamar a função que processa
-                // Se a função loadDicomDataSet estiver disponível:
-                
-                cornerstone.loadAndCacheImage(imageId).then(image => {
-                    // Simula o objeto que o leitor de arquivo criaria
-                    let sop = {
-                        dataSet: image.data, // O dcmjs/dicomParser dataset
-                        Image: image
-                    };
+        // Reseta o contador para evitar conflitos
+        ImageManager.NumOfPreLoadSops = 0;
+
+        for (const study of data.studies) {
+            for (const series of study.series) {
+                for (const instance of series.instances) {
+                    const imageId = 'wadouri:' + instance.url.replace('dicomweb:', '');
                     
-                    // Adiciona ao gerenciador do sistema
-                    ImageManager.preLoadSops.push({
-                        dataSet: sop.dataSet,
-                        image: sop.Image,
-                        Sop: sop,
-                        SeriesInstanceUID: instance.seriesInstanceUID,
-                        Index: instance.instanceNumber
-                    });
-                });
-            });
-        });
-    });
+                    ImageManager.NumOfPreLoadSops += 1;
+                    
+                    cornerstone.loadAndCacheImage(imageId).then(image => {
+                        // Criamos o objeto que o ImageManager espera
+                        let sopData = {
+                            dataSet: image.data, 
+                            image: image,
+                            Sop: { dataSet: image.data, image: image },
+                            SeriesInstanceUID: instance.seriesInstanceUID || "default",
+                            Index: instance.instanceNumber || 1
+                        };
 
-    // Após carregar, dispara os métodos nativos que o upload usa
-    setTimeout(() => {
-        ImageManager.loadPreLoadSops();
-        setTimeout(loadRestImageData, 1000);
-    }, 2000);
+                        ImageManager.preLoadSops.push(sopData);
+                        ImageManager.NumOfPreLoadSops -= 1;
+
+                        // Quando todos terminarem, o ImageManager assume o controle
+                        if (ImageManager.NumOfPreLoadSops === 0) {
+                            console.log("Todos os arquivos carregados, inicializando ImageManager...");
+                            ImageManager.loadPreLoadSops();
+                            // Chama a função interna do BlueLight para organizar o layout
+                            setTimeout(loadRestImageData, 1000);
+                        }
+                    });
+                }
+            }
+        }
+    } catch (error) {
+        console.error("Falha ao integrar com ImageManager:", error);
+    }
 }
 
 function loadSopFromDataSet(dataSet, type) {
