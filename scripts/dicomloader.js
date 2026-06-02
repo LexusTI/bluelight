@@ -1,26 +1,42 @@
 async function loadLexusStudy(jsonUrl) {
+    console.log("--- Iniciando loadLexusStudy ---");
     try {
         const response = await fetch(jsonUrl);
         if (!response.ok) throw new Error("Erro ao acessar a URL do JSON");
         
         const data = await response.json();
+        console.log("JSON carregado, número de estudos:", data.studies?.length);
+
         const element = document.getElementById('DicomPage');
+        if (!element) {
+            console.error("ERRO: Elemento DicomPage não encontrado no DOM!");
+            return;
+        }
 
-        // Habilita o elemento se ainda não estiver
-        try { cornerstone.enable(element); } catch(e) {}
+        // Habilita o elemento antes de carregar
+        try { cornerstone.enable(element); } catch(e) { console.warn("Elemento já estava habilitado"); }
 
-        // Carrega a primeira instância do primeiro estudo como exemplo
-        const instance = data.studies[0].series[0].instances[0];
-        const imageId = 'wadouri:' + instance.url.replace('dicomweb:', '');
-        
-        const image = await cornerstone.loadAndCacheImage(imageId);
-        
-        // Exibe diretamente no elemento, garantindo que ele está habilitado
-        cornerstone.displayImage(element, image);
-        console.log("Imagem exibida com sucesso!");
-
+        // Itera sobre as imagens
+        for (const study of data.studies) {
+            for (const series of study.series) {
+                for (const instance of series.instances) {
+                    const cleanUrl = instance.url.replace('dicomweb:', '');
+                    const imageId = 'wadouri:' + cleanUrl;
+                    
+                    console.log("Tentando carregar:", imageId);
+                    
+                    try {
+                        const image = await cornerstone.loadAndCacheImage(imageId);
+                        console.log("Imagem carregada com sucesso, exibindo...");
+                        cornerstone.displayImage(element, image);
+                    } catch (err) {
+                        console.error("Erro crítico ao carregar a imagem " + imageId + ":", err);
+                    }
+                }
+            }
+        }
     } catch (error) {
-        console.error("Falha na integração:", error);
+        console.error("Falha geral na integração Lexus:", error);
     }
 }
 
