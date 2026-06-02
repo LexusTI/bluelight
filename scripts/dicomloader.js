@@ -14,22 +14,22 @@ async function loadLexusStudy(jsonUrl) {
                     
                     promises.push(
                         cornerstone.loadAndCacheImage(imageId).then(image => {
-                            // Estrutura exigida pelo gui.js para evitar o erro de 'Sop' undefined
+                            // Preenchendo as propriedades de forma explícita para evitar 'undefined'
                             let sopObj = {
                                 dataSet: image.data,
-                                Image: image
+                                Image: image,
+                                SeriesInstanceUID: instance.seriesInstanceUID || image.data.string('x0020000e')
                             };
 
                             let entry = {
                                 dataSet: image.data,
                                 image: image,
-                                Sop: sopObj, // O gui.js busca o objeto Sop aqui
-                                SeriesInstanceUID: instance.seriesInstanceUID || image.data.string('x0020000e'),
+                                Sop: sopObj, 
+                                SeriesInstanceUID: sopObj.SeriesInstanceUID,
                                 Index: instance.instanceNumber || 1
                             };
 
                             ImageManager.preLoadSops.push(entry);
-                            console.log("Imagem processada na fila:", instance.instanceNumber);
                         })
                     );
                 });
@@ -38,19 +38,17 @@ async function loadLexusStudy(jsonUrl) {
 
         await Promise.all(promises);
         
-        console.log("Total na fila:", ImageManager.preLoadSops.length);
-        
-        // Inicializa o gerenciador
         if (ImageManager.preLoadSops.length > 0) {
+            // O erro acontece aqui, então vamos garantir que o ImageManager 
+            // tenha o que ele precisa antes de chamar as funções de GUI.
             ImageManager.loadPreLoadSops();
             
-            // Força a atualização da UI sem chamar setAllSeriesCount manualmente 
-            // se o loadPreLoadSops já disparar o processo.
-            setTimeout(loadRestImageData, 1000);
-            
-            // Opcional: força o clique na ferramenta padrão para garantir foco
-            const mouseTool = getByid("MouseOperation");
-            if(mouseTool) mouseTool.click();
+            // Em vez de chamar hideAllDrawer() ou algo que dispare refleshGUI()
+            // imediatamente, vamos dar um tempo para o processamento terminar.
+            setTimeout(() => {
+                console.log("Forçando renderização final...");
+                loadRestImageData();
+            }, 1000);
         }
 
     } catch (error) {
