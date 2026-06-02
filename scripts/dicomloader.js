@@ -1,24 +1,31 @@
 async function loadLexusStudy(jsonUrl) {
-    console.log("--- Iniciando carregamento Blindado ---");
+    console.log("--- Iniciando carregamento Estruturado Final (Blindado) ---");
     
     try {
         const response = await fetch(jsonUrl);
         const data = await response.json();
         
-        // Limpeza agressiva
+        // Limpeza completa para evitar conflito com estudos anteriores
         ImageManager.preLoadSops = [];
+        if (!ImageManager.seriesList) ImageManager.seriesList = {};
         
         let promises = [];
+        
         data.studies.forEach(study => {
             study.series.forEach(series => {
-                let uid = series.seriesInstanceUID || "default_uid";
-                
+                // Mapeamento de Série para evitar erro no gui.js
+                let uid = series.seriesInstanceUID || "series_" + Math.random().toString(36).substr(2, 9);
+                ImageManager.seriesList[uid] = { 
+                    SeriesInstanceUID: uid, 
+                    SeriesDescription: series.seriesDescription || "Estudo Lexus" 
+                };
+
                 series.instances.forEach(instance => {
                     const imageId = 'wadouri:' + instance.url.replace('dicomweb:', '');
                     
                     promises.push(
                         cornerstone.loadAndCacheImage(imageId).then(image => {
-                            // Estrutura completa e protegida
+                            // Estrutura de dados exigida pelo BlueLight
                             let entry = {
                                 dataSet: image.data,
                                 image: image,
@@ -37,25 +44,44 @@ async function loadLexusStudy(jsonUrl) {
             });
         });
 
+        // Aguarda o download de todas as imagens
         await Promise.all(promises);
         
-        // CORREÇÃO DE SEGURANÇA: Preenche o ImageManager com o mínimo necessário para o gui.js
-        // Se o gui.js espera SeriesInstanceUID, vamos garantir que eles existam
-        ImageManager.preLoadSops = ImageManager.preLoadSops.filter(item => item.Sop !== undefined);
+        // Proteção: Remove qualquer item corrompido antes de inicializar
+        ImageManager.preLoadSops = ImageManager.preLoadSops.filter(item => item && item.Sop);
 
-        console.log("Total na fila de renderização:", ImageManager.preLoadSops.length);
+        console.log("Total de imagens na fila:", ImageManager.preLoadSops.length);
         
-        // Inicializa
-        ImageManager.loadPreLoadSops();
-        
-        setTimeout(() => {
-            // Se o gui.js falha na linha 71, é porque ele itera sobre algo vazio.
-            // Tentamos evitar o disparo do refleshGUI manual aqui se for perigoso
-            if (typeof loadRestImageData === 'function') loadRestImageData();
-        }, 1000);
+        if (ImageManager.preLoadSops.length > 0) {
+            // Inicializa a engine do BlueLight
+            ImageManager.loadPreLoadSops();
+            
+            // Força a renderização com delay para garantir que o DOM esteja pronto
+            setTimeout(() => {
+                console.log("Forçando renderização final...");
+                
+                // Dispara funções nativas de renderização do sistema
+                if (typeof loadRestImageData === 'function') loadRestImageData();
+                
+                // Força o resize global para re-layout do canvas
+                window.dispatchEvent(new Event('resize'));
+                
+                // Tenta forçar a atualização visual dos Viewports pelo Cornerstone
+                if (typeof Viewport_Total !== 'undefined') {
+                    for (let i = 0; i < Viewport_Total; i++) {
+                        let v = GetViewport(i);
+                        if (v && v.element) cornerstone.updateImage(v.element);
+                    }
+                }
+                
+                // Ativa a ferramenta de mouse para garantir foco interativo
+                const mouseTool = getByid("MouseOperation");
+                if (mouseTool) mouseTool.click();
+            }, 1500);
+        }
 
     } catch (error) {
-        console.error("Erro na integração:", error);
+        console.error("Erro crítico na integração:", error);
     }
 }
 
