@@ -5,60 +5,67 @@ async function loadLexusStudy(jsonUrl) {
         const response = await fetch(jsonUrl);
         const data = await response.json();
         
-        // Limpa qualquer dado residual para evitar conflitos de cache
+        // Limpeza de estado para evitar lixo de carregamentos anteriores
         ImageManager.preLoadSops = [];
+        // Inicializa o objeto de séries se não existir
+        if (!ImageManager.seriesList) ImageManager.seriesList = {};
+        
         let promises = [];
         
         data.studies.forEach(study => {
             study.series.forEach(series => {
+                // Registra a série no gerenciador para evitar erro de SeriesInstanceUID
+                let uid = series.seriesInstanceUID || "default_series_uid";
+                ImageManager.seriesList[uid] = { 
+                    SeriesInstanceUID: uid, 
+                    SeriesDescription: series.seriesDescription || "Unknown" 
+                };
+
                 series.instances.forEach(instance => {
                     const imageId = 'wadouri:' + instance.url.replace('dicomweb:', '');
                     
                     promises.push(
                         cornerstone.loadAndCacheImage(imageId).then(image => {
-                            // Estrutura rigorosa exigida pelo gui.js e pelo BlueLight
                             let sopObj = {
                                 dataSet: image.data,
                                 Image: image,
-                                SeriesInstanceUID: instance.seriesInstanceUID || image.data.string('x0020000e')
+                                SeriesInstanceUID: uid
                             };
 
                             let entry = {
                                 dataSet: image.data,
                                 image: image,
                                 Sop: sopObj, 
-                                SeriesInstanceUID: sopObj.SeriesInstanceUID,
+                                SeriesInstanceUID: uid,
                                 Index: parseInt(instance.instanceNumber) || 1
                             };
 
                             ImageManager.preLoadSops.push(entry);
-                            console.log("Imagem processada na fila:", instance.instanceNumber);
                         })
                     );
                 });
             });
         });
 
-        // Aguarda todas as imagens serem baixadas e decodificadas
         await Promise.all(promises);
         
         console.log("Total na fila de renderização:", ImageManager.preLoadSops.length);
         
         if (ImageManager.preLoadSops.length > 0) {
-            // Inicializa a lógica de visualização do sistema
+            // Inicializa a lógica de montagem do BlueLight
             ImageManager.loadPreLoadSops();
             
-            // Força a atualização do layout e renderização
+            // Força a atualização da interface
             setTimeout(() => {
-                console.log("Forçando atualização final da UI...");
-                loadRestImageData();
+                console.log("Executando renderização final...");
                 
-                // Força o redimensionamento para recalcular o CSS dos containers
-                if (typeof window.onresize === 'function') {
-                    window.onresize();
-                }
+                // Dispara o redesenho da tabela de séries (deve passar do erro da linha 71)
+                if (typeof loadRestImageData === 'function') loadRestImageData();
                 
-                // Dispara ferramenta padrão para garantir interação
+                // Força o redimensionamento para recalcular o CSS/Canvas
+                if (typeof window.onresize === 'function') window.onresize();
+                
+                // Foca na ferramenta de mouse padrão para ativar a interatividade
                 const mouseTool = getByid("MouseOperation");
                 if (mouseTool) mouseTool.click();
             }, 1000);
