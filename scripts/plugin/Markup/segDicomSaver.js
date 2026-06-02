@@ -1,42 +1,47 @@
-getByid("writeSEG").addEventListener("click", function () {
-    getByid("saveSEG").onclick = function () {
-        let buffer = getSegDicomInstance();
-        if (!buffer) return;
+window.addEventListener('load', function () {
+    const writeSEG = document.getElementById("writeSEG");
+    
+    if (writeSEG) {
+        writeSEG.addEventListener("click", function () {
+            const saveSEG = document.getElementById("saveSEG");
+            if (saveSEG) {
+                saveSEG.onclick = function () {
+                    let buffer = getSegDicomInstance();
+                    if (!buffer) return;
 
-        let a = document.createElement("a");
-        let file = new Blob([buffer], {
-            type: "application/dicom"
+                    let a = document.createElement("a");
+                    let file = new Blob([buffer], {
+                        type: "application/dicom"
+                    });
+
+                    a.href = window.URL.createObjectURL(file);
+                    a.download = "SEG.dcm";
+                    a.click();
+                };
+            }
         });
-
-        a.href = window.URL.createObjectURL(file);
-        a.download = "SEG.dcm";
-        a.click();
-    };
+    }
 });
 
+// Funções de suporte permanecem fora do load, pois são chamadas sob demanda
 function getFormattedDateTime() {
     const now = new Date();
-
-    // Format YYYYMMDD
     const year = now.getUTCFullYear();
     const month = String(now.getUTCMonth() + 1).padStart(2, '0');
     const day = String(now.getUTCDate()).padStart(2, '0');
     const formattedDate = `${year}${month}${day}`;
 
-    // Format HHMMSS.FFFFFF
     const hours = String(now.getUTCHours()).padStart(2, '0');
     const minutes = String(now.getUTCMinutes()).padStart(2, '0');
     const seconds = String(now.getUTCSeconds()).padStart(2, '0');
     const fractionalSecond = String(now.getUTCMilliseconds() * 1000).padStart(6, '0');
 
-    // UTC Offset (+/-ZZXX)
     const timezoneOffset = now.getTimezoneOffset();
     const offsetSign = timezoneOffset <= 0 ? '+' : '-';
     const offsetHours = String(Math.abs(Math.floor(timezoneOffset / 60))).padStart(2, '0');
     const offsetMinutes = String(Math.abs(timezoneOffset % 60)).padStart(2, '0');
     const offset = `${offsetSign}${offsetHours}${offsetMinutes}`;
 
-    // Combine date and time
     const formattedTime = `${hours}${minutes}${seconds}.${fractionalSecond}${offset}`;
     return { date: formattedDate, time: formattedTime };
 }
@@ -48,7 +53,6 @@ function getSegDicomInstance() {
     let generatedSeriesUid = CreateUid("series");
 
     let dicomParserDataset = GetViewport().Sop.dataSet;
-
     let { date: newSeriesDate, time: newSeriesTime } = getFormattedDateTime();
 
     let dataset = {
@@ -75,13 +79,11 @@ function getSegDicomInstance() {
         Manufacturer: "BlueLight",
         StudyDescription: dicomParserDataset.string("x00081030"),
         SeriesDescription: dicomParserDataset.string("x0008103e") || "BlueLight Segmentation",
-        ManufacturerModelName: getByid('SegManufacturerModelName').value,
-        ReferencedSeriesSequence: [
-            {
-                ReferencedInstanceSequence: [],
-                SeriesInstanceUID: dicomParserDataset.string("x0020000e")
-            }
-        ],
+        ManufacturerModelName: document.getElementById('SegManufacturerModelName')?.value || "Default",
+        ReferencedSeriesSequence: [{
+            ReferencedInstanceSequence: [],
+            SeriesInstanceUID: dicomParserDataset.string("x0020000e")
+        }],
         PatientName: GetViewport().tags.PatientName,
         PatientID: GetViewport().tags.PatientID,
         PatientBirthDate: GetViewport().tags.PatientBirthDate,
@@ -117,7 +119,7 @@ function getSegDicomInstance() {
         BitsAllocated: 1,
         BitsStored: 1,
         HighBit: 0,
-        PixelRepresentation: 0, //dicomParserDataset.string("x00280103"),
+        PixelRepresentation: 0,
         LossyImageCompression: dicomParserDataset.string("x00282110"),
         SegmentationType: "BINARY",
         SegmentSequence: {
@@ -127,14 +129,10 @@ function getSegDicomInstance() {
                 CodeMeaning: "Tissue"
             },
             SegmentNumber: undefined,
-            SegmentLabel: getByid('SegSegmentLabel').value,
+            SegmentLabel: document.getElementById('SegSegmentLabel')?.value || "Segment",
             SegmentAlgorithmType: "SEMIAUTOMATIC",
             SegmentAlgorithmName: "Slicer Prototype",
-            RecommendedDisplayCIELabValue: [
-                34885,
-                53485,
-                50171
-            ],
+            RecommendedDisplayCIELabValue: [34885, 53485, 50171],
             SegmentedPropertyTypeCodeSequence: {
                 CodeValue: "T-D0050",
                 CodingSchemeDesignator: "SRT",
@@ -145,14 +143,7 @@ function getSegDicomInstance() {
         ContentDescription: "BlueLight",
         SharedFunctionalGroupsSequence: {
             PlaneOrientationSequence: {
-                ImageOrientationPatient: [
-                    1,
-                    0,
-                    0,
-                    0,
-                    1,
-                    0
-                ]
+                ImageOrientationPatient: [1, 0, 0, 0, 1, 0]
             },
             PixelMeasuresSequence: {
                 SliceThickness: dicomParserDataset.string("x00180050"),
@@ -181,7 +172,6 @@ function getSegDicomInstance() {
         if (curMark.series === GetViewport().series && curMark.type === "SEG") {
             segCount++;
             markXy = concatenateUint8ClampedArrays(markXy, curMark.pixelData);
-
             dataset.PerFrameFunctionalGroupsSequence.push(getPerFrameFunctionGroup(curMark, segCount));
         }
     }
@@ -193,9 +183,7 @@ function getSegDicomInstance() {
     const dicomDict = new dcmjs.data.DicomDict(denaturalizedMetaHeader);
     dicomDict.dict = dcmjs.data.DicomMetaDictionary.denaturalizeDataset(dataset);
 
-    let dicomBuffer = dicomDict.write({ fragmentMultiframe: false });
-
-    return dicomBuffer;
+    return dicomDict.write({ fragmentMultiframe: false });
 }
 
 function isHaveSeg() {
@@ -203,7 +191,6 @@ function isHaveSeg() {
     for (let p = 0; p < PatientMark.length; p++) {
         if (PatientMark[p].series === GetViewport().series && PatientMark[p].type === "SEG") segCount++;
     }
-
     return segCount > 0;
 }
 
@@ -211,7 +198,7 @@ function getPerFrameFunctionGroup(mark, segCount) {
     let instance = ImageManager.findSop(mark.sop);
     let instanceDataset = instance.dataSet;
 
-    let perFrameFunctionObj = {
+    return {
         DerivationImageSequence: {
             SourceImageSequence: {
                 ReferencedSOPClassUID: instanceDataset.string("x00080016"),
@@ -229,10 +216,7 @@ function getPerFrameFunctionGroup(mark, segCount) {
             }
         },
         FrameContentSequence: {
-            DimensionIndexValues: [
-                1,
-                segCount
-            ]
+            DimensionIndexValues: [1, segCount]
         },
         PlanePositionSequence: {
             ImagePositionPatient: mark.ImagePositionPatient
@@ -240,21 +224,16 @@ function getPerFrameFunctionGroup(mark, segCount) {
         SegmentIdentificationSequence: {
             ReferencedSegmentNumber: 1
         }
-    }
-
-    return perFrameFunctionObj;
+    };
 }
 
 function concatenateUint8ClampedArrays(...arrays) {
     const totalLength = arrays.reduce((sum, arr) => sum + arr.length, 0);
-
     const result = new Uint8ClampedArray(totalLength);
-
     let offset = 0;
     for (const arr of arrays) {
         result.set(arr, offset);
         offset += arr.length;
     }
-
     return result;
 }

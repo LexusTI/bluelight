@@ -1,40 +1,26 @@
 async function loadLexusStudy(jsonUrl) {
     try {
-        console.log("Iniciando fetch do manifesto...");
         const response = await fetch(jsonUrl);
         if (!response.ok) throw new Error("Erro ao acessar a URL do JSON");
         
         const data = await response.json();
-        console.log("JSON carregado com sucesso:", data);
+        const element = document.getElementById('DicomPage');
 
-        data.studies.forEach(study => {
-            study.series.forEach(series => {
-                series.instances.forEach(instance => {
-                    // Remove o prefixo original e adiciona o 'wadouri:' para o Cornerstone
-                    const cleanUrl = instance.url.replace('dicomweb:', '');
-                    const imageId = 'wadouri:' + cleanUrl;
-                    
-                    console.log("Carregando imagem com ID: " + imageId);
-                    
-                    // Adiciona ao carregador do cornerstone
-                    cornerstone.loadAndCacheImage(imageId).then(image => {
-                        // Aguarda 500ms para garantir que o DOM do visualizador esteja pronto
-                        setTimeout(() => {
-                            const viewport = (typeof GetViewport === 'function') ? GetViewport(0) : null;
-                            
-                            if (viewport && viewport.element) {
-                                cornerstone.displayImage(viewport.element, image);
-                                console.log("Imagem exibida com sucesso!");
-                            } else {
-                                console.warn("Viewport ainda não está pronto. A imagem foi carregada, mas não exibida.");
-                            }
-                        }, 500); 
-                    }).catch(err => console.error("Erro ao carregar imagem individual:", err));
-                });
-            });
-        });
+        // Habilita o elemento se ainda não estiver
+        try { cornerstone.enable(element); } catch(e) {}
+
+        // Carrega a primeira instância do primeiro estudo como exemplo
+        const instance = data.studies[0].series[0].instances[0];
+        const imageId = 'wadouri:' + instance.url.replace('dicomweb:', '');
+        
+        const image = await cornerstone.loadAndCacheImage(imageId);
+        
+        // Exibe diretamente no elemento, garantindo que ele está habilitado
+        cornerstone.displayImage(element, image);
+        console.log("Imagem exibida com sucesso!");
+
     } catch (error) {
-        console.error("Falha na integração Lexus:", error);
+        console.error("Falha na integração:", error);
     }
 }
 
