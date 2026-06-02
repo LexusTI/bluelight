@@ -102,13 +102,17 @@ html {
 }
 
 .page {
-  width: calc(100% - var(--leftImagePadding) - var(--bordersize) * 1 - var(--leftScrollSize)*var(--ishaveLeftScroll));
-  left: calc(var(--leftImagePadding) + var(--bordersize) * 1 + var(--leftScrollSize)*var(--ishaveLeftScroll));
-  height: 100%;
-  position: relative;
-  overflow: hidden;
-  /* display: flex;
-   overflow-y: hidden;*/
+    /* Remove os cálculos que estão empurrando o elemento */
+    width: 100%;
+    left: 0; 
+    height: 100%;
+    
+    /* Garante que o conteúdo seja exibido */
+    position: relative; 
+    overflow: hidden;
+    
+    /* Adiciona display block para garantir comportamento padrão */
+    display: block; 
 }
 
 #LeftPicture {
