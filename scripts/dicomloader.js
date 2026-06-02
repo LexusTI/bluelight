@@ -1,5 +1,5 @@
 async function loadLexusStudy(jsonUrl) {
-    console.log("--- Iniciando carregamento Sincronizado ---");
+    console.log("--- Iniciando carregamento Estruturado ---");
     
     try {
         const response = await fetch(jsonUrl);
@@ -7,44 +7,57 @@ async function loadLexusStudy(jsonUrl) {
         
         let promises = [];
         
-        // Percorre todas as instâncias e cria uma lista de promessas
         data.studies.forEach(study => {
             study.series.forEach(series => {
                 series.instances.forEach(instance => {
                     const imageId = 'wadouri:' + instance.url.replace('dicomweb:', '');
                     
-                    // Adicionamos a promessa de carregamento à lista
                     promises.push(
                         cornerstone.loadAndCacheImage(imageId).then(image => {
-                            // Quando a imagem baixar, adicionamos ao ImageManager
-                            ImageManager.preLoadSops.push({
+                            // Estrutura exigida pelo gui.js para evitar o erro de 'Sop' undefined
+                            let sopObj = {
+                                dataSet: image.data,
+                                Image: image
+                            };
+
+                            let entry = {
                                 dataSet: image.data,
                                 image: image,
-                                Sop: { dataSet: image.data, image: image },
-                                SeriesInstanceUID: instance.seriesInstanceUID || "default",
+                                Sop: sopObj, // O gui.js busca o objeto Sop aqui
+                                SeriesInstanceUID: instance.seriesInstanceUID || image.data.string('x0020000e'),
                                 Index: instance.instanceNumber || 1
-                            });
-                            console.log("Imagem adicionada à fila:", imageId);
+                            };
+
+                            ImageManager.preLoadSops.push(entry);
+                            console.log("Imagem processada na fila:", instance.instanceNumber);
                         })
                     );
                 });
             });
         });
 
-        // O segredo: aguarda TODAS as imagens terminarem de baixar
         await Promise.all(promises);
         
-        console.log("Todas as imagens baixadas. Total na fila:", ImageManager.preLoadSops.length);
+        console.log("Total na fila:", ImageManager.preLoadSops.length);
         
-        // Agora, e somente agora, inicializamos a interface
-        ImageManager.loadPreLoadSops();
-        setAllSeriesCount();
-        setTimeout(loadRestImageData, 1000);
+        // Inicializa o gerenciador
+        if (ImageManager.preLoadSops.length > 0) {
+            ImageManager.loadPreLoadSops();
+            
+            // Força a atualização da UI sem chamar setAllSeriesCount manualmente 
+            // se o loadPreLoadSops já disparar o processo.
+            setTimeout(loadRestImageData, 1000);
+            
+            // Opcional: força o clique na ferramenta padrão para garantir foco
+            const mouseTool = getByid("MouseOperation");
+            if(mouseTool) mouseTool.click();
+        }
 
     } catch (error) {
-        console.error("Erro fatal no carregamento:", error);
+        console.error("Erro na integração Lexus:", error);
     }
 }
+
 function loadSopFromDataSet(dataSet, type) {
     try {
         var ErrorStudy = dataSet.string(Tag.StudyInstanceUID);
