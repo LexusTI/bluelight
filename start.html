@@ -13,6 +13,12 @@
   <link rel="stylesheet" type="text/css" href="css/gui.css">
   <link rel="stylesheet" type="text/css" href="css/vr.css">
   <link rel="icon" href="image/icon/title/bluelight.png" type="image/x-icon" />
+  <style>
+    #DicomPage {
+        width: 100%;
+        height: 90vh; /* Garante que ocupe espaço na tela */
+    }
+  </style>
 
   <script src="scripts/external/cornerstone/dicomParser.js"></script>
 
@@ -37,6 +43,7 @@
     import { decodeImageFrame } from "../scripts/external/cornerstone/decode/decodeImageFrame.js";
     window.decodeImage = decodeImageFrame;
   </script>
+  
 
   <script>
     // 1. Primeiro, certifique-se de que o cornerstoneWADOImageLoader está configurado
@@ -68,14 +75,37 @@
   <script src="scripts/dicomloader.js"></script>
 
   <script>
-    // Usa o addEventListener em vez de substituir o onload
     window.addEventListener('load', function() {
+        // 1. Configuração do Cornerstone (deve ocorrer antes de qualquer operação)
+        if (typeof cornerstoneWADOImageLoader !== 'undefined') {
+            cornerstoneWADOImageLoader.external.cornerstone = cornerstone;
+            cornerstoneWADOImageLoader.external.dicomParser = dicomParser;
+
+            cornerstoneWADOImageLoader.webWorkerManager.initialize({
+                webWorkerPath: 'scripts/external/cornerstone/cornerstoneWADOImageLoaderWebWorker.min.js',
+                taskConfiguration: {
+                    'decodeTask': {
+                        codecsPath: 'scripts/external/cornerstone/cornerstoneWADOImageLoaderCodecs.min.js'
+                    }
+                }
+            });
+            cornerstone.registerImageLoader('wadouri', cornerstoneWADOImageLoader.wadouri.loadImage);
+        }
+
+        // 2. Lógica de Carregamento
         const urlParams = new URLSearchParams(window.location.search);
         const jsonUrl = urlParams.get('url');
-        
-        if (jsonUrl && typeof loadLexusStudy === 'function') {
-            console.log("Iniciando carregamento do estudo Lexus...");
-            loadLexusStudy(jsonUrl);
+        const element = document.getElementById('DicomPage');
+
+        if (jsonUrl && element) {
+            try { cornerstone.enable(element); } catch(e) {}
+
+            if (typeof loadLexusStudy === 'function') {
+                console.log("Chamando loadLexusStudy...");
+                loadLexusStudy(jsonUrl);
+            } else {
+                console.error("A função loadLexusStudy não foi carregada.");
+            }
         }
     });
   </script>
