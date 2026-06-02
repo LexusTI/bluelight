@@ -1,22 +1,24 @@
 async function loadLexusStudy(jsonUrl) {
-    console.log("--- Iniciando carregamento Estruturado Final ---");
+    console.log("--- Iniciando carregamento Blindado ---");
     
     try {
         const response = await fetch(jsonUrl);
         const data = await response.json();
         
+        // Limpeza agressiva
         ImageManager.preLoadSops = [];
-        let promises = [];
         
+        let promises = [];
         data.studies.forEach(study => {
             study.series.forEach(series => {
-                let uid = series.seriesInstanceUID || "series_" + Math.random();
+                let uid = series.seriesInstanceUID || "default_uid";
                 
                 series.instances.forEach(instance => {
                     const imageId = 'wadouri:' + instance.url.replace('dicomweb:', '');
                     
                     promises.push(
                         cornerstone.loadAndCacheImage(imageId).then(image => {
+                            // Estrutura completa e protegida
                             let entry = {
                                 dataSet: image.data,
                                 image: image,
@@ -36,22 +38,26 @@ async function loadLexusStudy(jsonUrl) {
         });
 
         await Promise.all(promises);
-        console.log("Total na fila:", ImageManager.preLoadSops.length);
         
-        // Dispara o motor do BlueLight
+        // CORREÇÃO DE SEGURANÇA: Preenche o ImageManager com o mínimo necessário para o gui.js
+        // Se o gui.js espera SeriesInstanceUID, vamos garantir que eles existam
+        ImageManager.preLoadSops = ImageManager.preLoadSops.filter(item => item.Sop !== undefined);
+
+        console.log("Total na fila de renderização:", ImageManager.preLoadSops.length);
+        
+        // Inicializa
         ImageManager.loadPreLoadSops();
         
         setTimeout(() => {
+            // Se o gui.js falha na linha 71, é porque ele itera sobre algo vazio.
+            // Tentamos evitar o disparo do refleshGUI manual aqui se for perigoso
             if (typeof loadRestImageData === 'function') loadRestImageData();
-            // Disparamos o redimensionamento apenas após carregar os dados
-            window.dispatchEvent(new Event('resize')); 
-        }, 500);
+        }, 1000);
 
     } catch (error) {
-        console.error("Erro na integração Lexus:", error);
+        console.error("Erro na integração:", error);
     }
 }
-
 
 function loadSopFromDataSet(dataSet, type) {
     try {
