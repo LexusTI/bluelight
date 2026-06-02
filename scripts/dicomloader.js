@@ -1,43 +1,42 @@
 async function loadLexusStudy(jsonUrl) {
-    console.log("--- Iniciando loadLexusStudy ---");
-    try {
-        const response = await fetch(jsonUrl);
-        if (!response.ok) throw new Error("Erro ao acessar a URL do JSON");
-        
-        const data = await response.json();
-        console.log("JSON carregado, número de estudos:", data.studies?.length);
+    const response = await fetch(jsonUrl);
+    const data = await response.json();
 
-        const element = document.getElementById('DicomPage');
-        if (!element) {
-            console.error("ERRO: Elemento DicomPage não encontrado no DOM!");
-            return;
-        }
-
-        // Habilita o elemento antes de carregar
-        try { cornerstone.enable(element); } catch(e) { console.warn("Elemento já estava habilitado"); }
-
-        // Itera sobre as imagens
-        for (const study of data.studies) {
-            for (const series of study.series) {
-                for (const instance of series.instances) {
-                    const cleanUrl = instance.url.replace('dicomweb:', '');
-                    const imageId = 'wadouri:' + cleanUrl;
+    // Em vez de exibir direto, vamos registrar no ImageManager
+    data.studies.forEach(study => {
+        study.series.forEach(series => {
+            series.instances.forEach(instance => {
+                const imageId = 'wadouri:' + instance.url.replace('dicomweb:', '');
+                
+                // Aqui está o segredo: você precisa que o ImageManager reconheça esse SOP
+                // Você pode tentar injetar no preLoadSops ou chamar a função que processa
+                // Se a função loadDicomDataSet estiver disponível:
+                
+                cornerstone.loadAndCacheImage(imageId).then(image => {
+                    // Simula o objeto que o leitor de arquivo criaria
+                    let sop = {
+                        dataSet: image.data, // O dcmjs/dicomParser dataset
+                        Image: image
+                    };
                     
-                    console.log("Tentando carregar:", imageId);
-                    
-                    try {
-                        const image = await cornerstone.loadAndCacheImage(imageId);
-                        console.log("Imagem carregada com sucesso, exibindo...");
-                        cornerstone.displayImage(element, image);
-                    } catch (err) {
-                        console.error("Erro crítico ao carregar a imagem " + imageId + ":", err);
-                    }
-                }
-            }
-        }
-    } catch (error) {
-        console.error("Falha geral na integração Lexus:", error);
-    }
+                    // Adiciona ao gerenciador do sistema
+                    ImageManager.preLoadSops.push({
+                        dataSet: sop.dataSet,
+                        image: sop.Image,
+                        Sop: sop,
+                        SeriesInstanceUID: instance.seriesInstanceUID,
+                        Index: instance.instanceNumber
+                    });
+                });
+            });
+        });
+    });
+
+    // Após carregar, dispara os métodos nativos que o upload usa
+    setTimeout(() => {
+        ImageManager.loadPreLoadSops();
+        setTimeout(loadRestImageData, 1000);
+    }, 2000);
 }
 
 function loadSopFromDataSet(dataSet, type) {
