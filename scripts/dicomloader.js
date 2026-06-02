@@ -1,10 +1,12 @@
 async function loadLexusStudy(jsonUrl) {
-    console.log("--- Iniciando carregamento Estruturado ---");
+    console.log("--- Iniciando carregamento Estruturado Final ---");
     
     try {
         const response = await fetch(jsonUrl);
         const data = await response.json();
         
+        // Limpa qualquer dado residual para evitar conflitos de cache
+        ImageManager.preLoadSops = [];
         let promises = [];
         
         data.studies.forEach(study => {
@@ -14,7 +16,7 @@ async function loadLexusStudy(jsonUrl) {
                     
                     promises.push(
                         cornerstone.loadAndCacheImage(imageId).then(image => {
-                            // Preenchendo as propriedades de forma explícita para evitar 'undefined'
+                            // Estrutura rigorosa exigida pelo gui.js e pelo BlueLight
                             let sopObj = {
                                 dataSet: image.data,
                                 Image: image,
@@ -26,33 +28,44 @@ async function loadLexusStudy(jsonUrl) {
                                 image: image,
                                 Sop: sopObj, 
                                 SeriesInstanceUID: sopObj.SeriesInstanceUID,
-                                Index: instance.instanceNumber || 1
+                                Index: parseInt(instance.instanceNumber) || 1
                             };
 
                             ImageManager.preLoadSops.push(entry);
+                            console.log("Imagem processada na fila:", instance.instanceNumber);
                         })
                     );
                 });
             });
         });
 
+        // Aguarda todas as imagens serem baixadas e decodificadas
         await Promise.all(promises);
         
+        console.log("Total na fila de renderização:", ImageManager.preLoadSops.length);
+        
         if (ImageManager.preLoadSops.length > 0) {
-            // O erro acontece aqui, então vamos garantir que o ImageManager 
-            // tenha o que ele precisa antes de chamar as funções de GUI.
+            // Inicializa a lógica de visualização do sistema
             ImageManager.loadPreLoadSops();
             
-            // Em vez de chamar hideAllDrawer() ou algo que dispare refleshGUI()
-            // imediatamente, vamos dar um tempo para o processamento terminar.
+            // Força a atualização do layout e renderização
             setTimeout(() => {
-                console.log("Forçando renderização final...");
+                console.log("Forçando atualização final da UI...");
                 loadRestImageData();
+                
+                // Força o redimensionamento para recalcular o CSS dos containers
+                if (typeof window.onresize === 'function') {
+                    window.onresize();
+                }
+                
+                // Dispara ferramenta padrão para garantir interação
+                const mouseTool = getByid("MouseOperation");
+                if (mouseTool) mouseTool.click();
             }, 1000);
         }
 
     } catch (error) {
-        console.error("Erro na integração Lexus:", error);
+        console.error("Erro crítico na integração Lexus:", error);
     }
 }
 
