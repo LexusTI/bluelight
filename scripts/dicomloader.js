@@ -5,41 +5,29 @@ async function loadLexusStudy(jsonUrl) {
         const response = await fetch(jsonUrl);
         const data = await response.json();
         
-        // Limpeza de estado para evitar lixo de carregamentos anteriores
         ImageManager.preLoadSops = [];
-        // Inicializa o objeto de séries se não existir
-        if (!ImageManager.seriesList) ImageManager.seriesList = {};
-        
         let promises = [];
         
         data.studies.forEach(study => {
             study.series.forEach(series => {
-                // Registra a série no gerenciador para evitar erro de SeriesInstanceUID
-                let uid = series.seriesInstanceUID || "default_series_uid";
-                ImageManager.seriesList[uid] = { 
-                    SeriesInstanceUID: uid, 
-                    SeriesDescription: series.seriesDescription || "Unknown" 
-                };
-
+                let uid = series.seriesInstanceUID || "series_" + Math.random();
+                
                 series.instances.forEach(instance => {
                     const imageId = 'wadouri:' + instance.url.replace('dicomweb:', '');
                     
                     promises.push(
                         cornerstone.loadAndCacheImage(imageId).then(image => {
-                            let sopObj = {
-                                dataSet: image.data,
-                                Image: image,
-                                SeriesInstanceUID: uid
-                            };
-
                             let entry = {
                                 dataSet: image.data,
                                 image: image,
-                                Sop: sopObj, 
+                                Sop: { 
+                                    dataSet: image.data, 
+                                    Image: image,
+                                    SeriesInstanceUID: uid 
+                                },
                                 SeriesInstanceUID: uid,
                                 Index: parseInt(instance.instanceNumber) || 1
                             };
-
                             ImageManager.preLoadSops.push(entry);
                         })
                     );
@@ -48,33 +36,22 @@ async function loadLexusStudy(jsonUrl) {
         });
 
         await Promise.all(promises);
+        console.log("Total na fila:", ImageManager.preLoadSops.length);
         
-        console.log("Total na fila de renderização:", ImageManager.preLoadSops.length);
+        // Dispara o motor do BlueLight
+        ImageManager.loadPreLoadSops();
         
-        if (ImageManager.preLoadSops.length > 0) {
-            // Inicializa a lógica de montagem do BlueLight
-            ImageManager.loadPreLoadSops();
-            
-            // Força a atualização da interface
-            setTimeout(() => {
-                console.log("Executando renderização final...");
-                
-                // Dispara o redesenho da tabela de séries (deve passar do erro da linha 71)
-                if (typeof loadRestImageData === 'function') loadRestImageData();
-                
-                // Força o redimensionamento para recalcular o CSS/Canvas
-                if (typeof window.onresize === 'function') window.onresize();
-                
-                // Foca na ferramenta de mouse padrão para ativar a interatividade
-                const mouseTool = getByid("MouseOperation");
-                if (mouseTool) mouseTool.click();
-            }, 1000);
-        }
+        setTimeout(() => {
+            if (typeof loadRestImageData === 'function') loadRestImageData();
+            // Disparamos o redimensionamento apenas após carregar os dados
+            window.dispatchEvent(new Event('resize')); 
+        }, 500);
 
     } catch (error) {
-        console.error("Erro crítico na integração Lexus:", error);
+        console.error("Erro na integração Lexus:", error);
     }
 }
+
 
 function loadSopFromDataSet(dataSet, type) {
     try {
